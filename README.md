@@ -4,11 +4,11 @@ Projeto Windows Tauri 2, React, TypeScript, Vite e Tailwind. É uma primeira eta
 
 O código inclui troca imediata entre português brasileiro e inglês, temas claro/escuro/sistema, configuração de inicialização com o Windows via plugin oficial do Tauri, e a opção de encerrar ou ocultar a janela na área de notificação. O menu da área de notificação possui abrir e encerrar, traduzidos. A inicialização usa `--minimized`, com janela inicialmente oculta. O aplicativo não habilita inicialização automática por conta própria; a escolha ocorre nas preferências.
 
-**Estado de verificação:** este projeto ainda não foi compilado nem executado: Rust, C++ Build Tools e dependências de frontend não foram instalados. Os comportamentos do tray e do registro de inicialização precisam de teste real no Windows antes de afirmar que funcionam. O código não faz acesso ao mouse.
+**Estado de verificação:** o frontend e o aplicativo Windows foram compilados com sucesso. O processo abriu no Windows; os comportamentos do tray, das preferências e do registro de inicialização ainda precisam de testes funcionais. O código não faz acesso ao mouse.
 
 ## Para preparar um ambiente de desenvolvimento
 
-Depois de autorizar e instalar os pré-requisitos oficiais do Tauri para Windows (Rust estável, ferramentas C++ MSVC e WebView2, se necessário), execute `npm install` e `npm run tauri dev` na pasta deste projeto. A criação do instalador usa `npm run tauri build`. O gerenciador npm já existe nesta máquina, instalado anteriormente com o REA. O plugin de inicialização exige Rust 1.90 ou superior.
+Com os pré-requisitos oficiais do Tauri para Windows instalados (Rust estável, ferramentas C++ MSVC e WebView2), execute `npm install` e `npm run tauri dev` na pasta deste projeto. A criação do instalador usa `npm run tauri build`. O plugin de inicialização exige Rust 1.90 ou superior.
 
 Referências: https://v2.tauri.app/start/prerequisites/ e https://v2.tauri.app/plugin/autostart/.
 
