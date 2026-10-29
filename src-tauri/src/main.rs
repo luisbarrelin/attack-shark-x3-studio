@@ -1,4 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#[allow(dead_code)]
+mod protocol;
+mod device;
+mod profiles;
 use serde::{Deserialize, Serialize};
 use std::{fs, sync::Mutex};
 use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, Manager, State, WindowEvent};
@@ -11,11 +15,47 @@ impl Default for Preferences {
 }
 struct AppState(Mutex<Preferences>);
 
+#[tauri::command]
+fn detect_device() -> Result<device::DevicePresence, String> { device::enumerate() }
+
+static DEVICE_OPERATION: Mutex<()> = Mutex::new(());
+static PROFILE_OPERATION: Mutex<()> = Mutex::new(());
+
+fn profile_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path().app_config_dir().map(|p| p.join("profiles.json")).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn get_profiles(app: tauri::AppHandle) -> Result<profiles::ProfileLibrary, String> {
+    let _guard = PROFILE_OPERATION.lock().map_err(|e| e.to_string())?;
+    profiles::load(&profile_path(&app)?)
+}
+#[tauri::command]
+fn save_profiles(app: tauri::AppHandle, library: profiles::ProfileLibrary) -> Result<(), String> {
+    let _guard = PROFILE_OPERATION.lock().map_err(|e| e.to_string())?;
+    profiles::save(&profile_path(&app)?, &library)
+}
+#[tauri::command]
+async fn set_sensor_profile(profile: protocol::SensorProfile, replace_confirmed: bool) -> Result<(), String> {
+    if !replace_confirmed { return Err("Complete sensor replacement must be acknowledged".into()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = DEVICE_OPERATION.try_lock().map_err(|_| "Device operation in progress".to_owned())?;
+        device::send_sensor(&profile)
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn set_polling_rate(hz: u16) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = DEVICE_OPERATION.try_lock().map_err(|_| "Device operation in progress".to_owned())?;
+        device::send_polling(hz)
+    }).await.map_err(|e| e.to_string())?
+}
+
 fn config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path().app_config_dir().map(|p| p.join("preferences.json")).map_err(|e| e.to_string())
 }
 fn load_preferences(app: &tauri::AppHandle) -> Preferences {
-    config_path(app).ok().and_then(|p| fs::read(p).ok()).and_then(|data| serde_json::from_slice(&data).ok()).unwrap_or_default()
+    config_path(app).ok().and_then(|p| fs::read(p).ok()).and_then(|data| serde_json::from_slice::<Preferences>(&data).ok()).filter(|p| ["pt-BR","en"].contains(&p.language.as_str()) && ["system","light","dark"].contains(&p.theme.as_str()) && ["exit","tray"].contains(&p.close_action.as_str())).unwrap_or_default()
 }
 fn reveal(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") { let _ = window.show(); let _ = window.unminimize(); let _ = window.set_focus(); }
@@ -59,7 +99,7 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| { if let WindowEvent::CloseRequested { api, .. } = event { let action = window.state::<AppState>().0.lock().map(|p| p.close_action.clone()).unwrap_or_else(|_| "exit".into()); if action == "tray" { api.prevent_close(); let _ = window.hide(); } else { window.app_handle().exit(0); } } })
-        .invoke_handler(tauri::generate_handler![get_preferences, save_preferences])
+        .invoke_handler(tauri::generate_handler![get_preferences, save_preferences, detect_device, set_polling_rate, get_profiles, save_profiles, set_sensor_profile])
         .run(tauri::generate_context!())
         .expect("Failed to run Attack Shark X3 Studio");
 }
