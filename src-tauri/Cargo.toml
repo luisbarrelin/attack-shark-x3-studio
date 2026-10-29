@@ -1,6 +1,6 @@
 [package]
 name = "attack-shark-x3-studio"
-version = "0.1.0"
+version = "0.2.0"
 description = "Windows interface for Attack Shark X3"
 edition = "2021"
 rust-version = "1.90"
