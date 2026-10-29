@@ -1,20 +1,34 @@
-# Attack Shark X3 Studio — código inicial
+# Attack Shark X3 Studio
 
-Projeto Windows Tauri 2, React, TypeScript, Vite e Tailwind. É uma primeira etapa de desenvolvimento, não um configurador funcional do mouse. O transporte HID e todas as funções de configuração do dispositivo ainda precisam ser implementados e validados.
+Versão 0.2.0 — aplicativo Windows independente em desenvolvimento, com Tauri 2, React, TypeScript, Vite e Tailwind. Ainda não possui equivalência funcional completa com o aplicativo do fabricante.
 
-O código inclui troca imediata entre português brasileiro e inglês, temas claro/escuro/sistema, configuração de inicialização com o Windows via plugin oficial do Tauri, e a opção de encerrar ou ocultar a janela na área de notificação. O menu da área de notificação possui abrir e encerrar, traduzidos. A inicialização usa `--minimized`, com janela inicialmente oculta. O aplicativo não habilita inicialização automática por conta própria; a escolha ocorre nas preferências.
+## Implementado
 
-**Estado de verificação:** o frontend e o aplicativo Windows foram compilados com sucesso. O processo abriu no Windows; os comportamentos do tray, das preferências e do registro de inicialização ainda precisam de testes funcionais. O código não faz acesso ao mouse.
+- Interface em português brasileiro e inglês, com troca imediata.
+- Temas claro, escuro e do Windows.
+- Instância única, área de notificação com abrir/encerrar e opção de fechar para a área de notificação.
+- Inicialização opcional com o Windows, minimizada (`--minimized`).
+- Detecção das interfaces HID presentes com VID 1D57 e PID FA60/FA61.
+- Encoder offline dos relatórios 04 (sensor/DPI) e 06 (taxa de leitura), e decoder do monitor 03.
+- Biblioteca local de até 64 perfis: criação por duplicação, renomeação, exclusão, seleção, gravação atômica e importação/exportação por JSON do Studio.
+- Edição dos oito slots de DPI, estágios habilitados, estágio ativo, cores RGB, LOD, Ripple Control, Angle Snap e Motion Sync. Os seis primeiros DPI do modelo inicial seguem os valores fornecidos pelo usuário; os demais campos são um modelo editável e não uma leitura de hardware.
+- Envio manual experimental de DPI/sensor (report 04) e taxa de leitura (report 06). O pacote de sensor substitui todos os oito estágios, cores e flags de uma vez e exige reconhecimento explícito na interface. O backend valida atributos e capacidades da coleção, exige uma única candidata e serializa as operações. O sucesso da API do Windows não confirma aplicação ou persistência no dispositivo.
 
-## Para preparar um ambiente de desenvolvimento
+## Ainda pendente
 
-Com os pré-requisitos oficiais do Tauri para Windows instalados (Rust estável, ferramentas C++ MSVC e WebView2), execute `npm install` e `npm run tauri dev` na pasta deste projeto. A criação do instalador usa `npm run tauri build`. O plugin de inicialização exige Rust 1.90 ou superior.
+- Recuperar o perfil completo atual do dispositivo e oferecer restauração verificada.
+- Botões, macros, perfis, bateria, energia e debounce com equivalência completa.
+- Confirmação e persistência dos comandos no firmware, compatibilidade entre revisões e reconexão.
+- Revisão visual e de acessibilidade completa e testes finais do instalador.
 
-Referências: https://v2.tauri.app/start/prerequisites/ e https://v2.tauri.app/plugin/autostart/.
+Os perfis são salvos apenas quando o usuário solicita. Editar campos, selecionar um perfil e salvar no computador não envia nada ao mouse. O envio ocorre pelos botões específicos. O aplicativo não grava automaticamente defaults no mouse. Não há comando genérico de escrita exposto ao frontend.
 
-## Escopo futuro
+## Verificação
 
-- Recuperar leitura de estado/ack e validar preservação dos demais campos antes de oferecer escrita HID.
-- Reproduzir DPI, polling, botões, macros, perfis, bateria e energia conforme a auditoria técnica.
-- Completar testes de acessibilidade, idiomas, inicialização, tray, atualização e desconexão.
-- Integrar componentes shadcn/ui quando houver ambiente de dependências disponível.
+A identificação USB FA60 foi observada no Windows. Seis testes locais de formatos, validação de biblioteca e persistência passaram, excluindo o teste de enumeração HID nesta rodada. A prévia web preservou o perfil após recarregar. O frontend e o executável foram compilados. Tentativas anteriores de leitura dos relatórios 04 e 06 retornaram timeout (erro Windows 121); nenhum estado completo do mouse foi recuperado. Não houve teste de escrita de configuração pelo Studio. A pedido do usuário, os testes no dispositivo foram suspensos. Não declarar a integração como validada no hardware.
+
+## Compilação
+
+Pré-requisitos: Rust estável (1.90+), ferramentas C++ MSVC e WebView2. Instale as dependências com `npm install`; execute `npm run dev` para prévia web ou `npx tauri dev` para desktop. Compile o executável com `npx tauri build --no-bundle` e o instalador com `npx tauri build`.
+
+Veja `VALIDACAO-HID.md` para os limites da análise e `design-system/attack-shark-x3-studio/MASTER.md` para a direção visual.
