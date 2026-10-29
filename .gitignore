@@ -5,3 +5,14 @@ src-tauri/target/
 .env
 .env.*
 !.env.example
+.venv/
+__pycache__/
+*.pyc
+dist/
+build/
+*.egg-info/
+*.spec
+driver/build/
+driver/out/
+attackshark/web/*.custom.*
+captures/shots/

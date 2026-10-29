@@ -1,0 +1,587 @@
+/* PRODMUTANT X3 driver - square controls, hairline rules, one accent.
+   Palette sampled from the two reference images: near-black base, deep crimson
+   rather than fire-engine red, bone-white highlights, acid-green for "alive". */
+:root{
+  --bg:#050506;
+  --panel:#0c0a0d;
+  --line:#1c181d;
+  --line2:#2e2630;
+  --fg:#eae3e2;          /* bone white, straight from the reference */
+  --dim:#877e86;
+  --accent:#a51f27;      /* deep crimson */
+  --accent-hi:#c8262f;
+  --accent-dim:#3f1418;  /* sampled shadow red */
+  --ok:#8fd14f;          /* the mask's eye green */
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --sans:"Segoe UI",system-ui,sans-serif;
+}
+#studio-language{font:12px var(--sans);color:var(--fg);background:var(--panel);border:1px solid var(--line2);border-radius:4px;padding:7px;max-width:155px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg);color:var(--fg);font:14px/1.45 var(--sans);
+  -webkit-font-smoothing:antialiased;
+  /* a single cold crimson wash behind the page - atmosphere, not a control glow */
+  background-image:
+    radial-gradient(120% 70% at 50% -10%, #2a0d12 0%, rgba(42,13,18,0) 60%),
+    radial-gradient(80% 50% at 100% 0%, #16090f 0%, rgba(22,9,15,0) 70%);
+  background-attachment:fixed;
+}
+/* right-hand backdrop: baked alpha ramp on the asset, so no hard edge here */
+body::before{
+  content:"";position:fixed;inset:0 0 0 auto;width:min(54vw,860px);
+  background:url("backdrop.png") right top / cover no-repeat;
+  opacity:.42;pointer-events:none;z-index:0;
+}
+/* scrim so controls stay legible over the artwork */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:linear-gradient(90deg,var(--bg) 0%,rgba(5,5,6,.82) 46%,rgba(5,5,6,.55) 100%);
+}
+.top,.grid,dialog,.toast{position:relative;z-index:1}
+button,input,select{font:inherit;color:inherit}
+
+/* ---------------------------------------------------------------- header */
+.top{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:28px;padding:10px 28px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,var(--head-a) 0%,var(--head-b) 100%);
+  position:sticky;top:0;z-index:5;
+}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.logo{
+  /* The asset carries its own margin and ring - tools/make_logo.py --fit
+     scales the whole mark inside the disc rather than cropping it to fill, so
+     nothing needs shrinking here. No CSS border either: a square frame around
+     a disc leaves four visible corners. */
+  width:46px;height:46px;object-fit:contain;object-position:center;
+  display:block;background:transparent;
+}
+.brand{overflow:hidden}
+.logo.round{border-radius:50%}
+.wordmark{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.wordmark b{font-size:15px;letter-spacing:.18em;font-weight:700;color:var(--fg)}
+.wordmark span{font-size:10px;letter-spacing:.32em;color:var(--dim)}
+
+/* Page navigation. Text, not pills: the current page is marked by the rule
+   underneath it, which is the least furniture that still reads as "you are
+   here". */
+.nav{display:flex;gap:4px;margin:0 auto 0 12px;align-self:stretch}
+.navitem{
+  background:none;border:0;border-bottom:2px solid transparent;
+  padding:0 14px;cursor:pointer;color:var(--dim);
+  font-size:13px;letter-spacing:.02em;margin-bottom:-11px;
+}
+.navitem:hover{color:var(--fg)}
+.navitem.on{color:var(--fg);border-bottom-color:var(--accent)}
+
+.page{display:none}
+.page.on{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:40px 48px;align-content:start;max-width:1120px;
+}
+@media (max-width:1100px){ .page.on{grid-template-columns:minmax(0,1fr)} }
+
+.status{display:flex;align-items:center;gap:22px}
+.batt{display:flex;align-items:center;gap:8px}
+.batt .meter{
+  width:38px;height:13px;border:1px solid var(--line2);padding:2px;
+  display:inline-block;position:relative;
+}
+.batt .meter::after{
+  content:"";position:absolute;right:-4px;top:3px;width:2px;height:5px;background:var(--line2);
+}
+.batt .meter i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
+.batt.low .meter i{background:var(--accent)}
+.batt .pct{font-family:var(--mono);font-size:12px;min-width:38px}
+.batt .volts{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.batt.unknown{opacity:.45}
+.batt.low .pct{color:var(--accent-hi)}
+.batt.stale{opacity:.55}
+.batt.charging .meter i{background:var(--dim)}
+.batt.charging .pct{color:var(--dim)}
+
+.link{display:flex;align-items:center;gap:9px;font-size:12px;white-space:nowrap}
+.link .dot{width:8px;height:8px;background:var(--dim);display:inline-block;flex:none}
+.link.on .dot{background:var(--ok)}
+.link.off .dot{background:var(--accent)}
+.link em{color:var(--dim);font-style:normal;font-family:var(--mono);font-size:11px}
+
+/* ------------------------------------------------------------------ grid */
+.grid{
+  display:grid;grid-template-columns:270px minmax(0,1fr);
+  align-items:start;gap:0;max-width:1400px;margin:0 auto;
+}
+/* the mouse stays in view while the settings scroll past it */
+.side{padding:32px 24px;position:sticky;top:67px}
+.panes{padding:32px 40px 64px;border-left:1px solid var(--line);min-width:0}
+body[data-page="tools"] .grid,body[data-page="profiles"] .grid{grid-template-columns:minmax(0,1fr)}
+body[data-page="tools"] .side,body[data-page="profiles"] .side{display:none}
+body[data-page="tools"] .panes,body[data-page="profiles"] .panes{border-left:0}
+/* a block is a heading and its controls; keep it whole in one column */
+.blk{break-inside:avoid;min-width:0}
+.blk.span{grid-column:1/-1}
+/* four on/off toggles read better two-up than as a tall stack */
+.blk .fields.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
+.binds{max-width:620px}
+.blk>h2:first-child{margin-top:0}
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .side{position:static}
+  .panes{border-left:0;border-top:1px solid var(--line)}
+}
+h2{
+  margin:28px 0 10px;font-size:15px;letter-spacing:0;
+  color:var(--fg);font-weight:600;
+}
+.col>h2:first-child{margin-top:0}
+.row.wrap{flex-wrap:wrap}
+.hint{color:var(--dim);font-size:12.5px;line-height:1.55;max-width:72ch}
+.blk>.hint:first-of-type{margin:0 0 4px}
+
+/* ----------------------------------------------------------- mouse map */
+.mouse svg{width:100%;max-width:190px;display:block;margin:0 auto 22px}
+.shell{fill:none;stroke:#4a3f52;stroke-width:2.2}
+.seam{stroke:#3a3142;stroke-width:1.2;fill:none}
+.hit rect,.hit path{cursor:pointer;transition:fill .12s}
+.hit .face{fill:url(#btngrad)}
+.hit .pad{fill:var(--pad)}
+.hit:hover rect,.hit:hover path,
+.hit.sel rect,.hit.sel path{fill:var(--accent-dim)}
+.lbl{
+  fill:var(--dim);font:600 13px var(--mono);text-anchor:middle;
+  pointer-events:none;dominant-baseline:middle;
+}
+.sensor{fill:none;stroke:#3a3142;stroke-width:1.1}
+.lbl.side{font-size:11px}
+.lbl.on{fill:var(--fg)}
+
+.btnlist{list-style:none;margin:0;padding:0}
+.btnlist li{
+  display:flex;align-items:center;gap:10px;padding:7px 0;
+  border-top:1px solid var(--line);cursor:pointer;
+}
+.btnlist li:hover{background:var(--surface)}
+.btnlist li.sel{background:var(--surface)}
+.btnlist .n{
+  width:20px;height:20px;flex:none;display:grid;place-items:center;
+  border:1px solid var(--line2);font:600 11px var(--mono);color:var(--dim);
+}
+.btnlist li.sel .n,.btnlist li:hover .n{border-color:var(--accent);color:var(--fg)}
+.btnlist .a{font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ------------------------------------------------------------------ dpi */
+table.dpi{width:100%;border-collapse:collapse}
+.dpi th{
+  text-align:left;font:600 11px var(--sans);letter-spacing:.06em;
+  color:var(--dim);padding:0 8px 8px 0;
+}
+.dpi td{padding:5px 8px 5px 0;border-top:1px solid var(--line);vertical-align:middle}
+.dpi td:first-child{color:var(--dim);font-family:var(--mono);width:22px}
+.dpi input[type=number]{
+  width:88px;background:var(--input-bg);border:1px solid var(--line2);padding:5px 7px;
+  font-family:var(--mono);
+}
+.dpi td.rng{width:44%}
+.dpi input[type=range]{width:100%;min-width:90px}
+.dpi input[type=color]{
+  width:34px;height:26px;padding:0;background:none;border:1px solid var(--line2);cursor:pointer;
+}
+.dpi input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+.dpi input[type=color]::-webkit-color-swatch{border:none}
+.dpi td.act{width:52px;text-align:center}
+.radio{
+  width:16px;height:16px;border:1px solid var(--line2);background:var(--input-bg);
+  display:inline-block;cursor:pointer;padding:0;
+}
+.radio.on{border-color:var(--accent);background:var(--accent)}
+
+/* ------------------------------------------------------- generic controls */
+.row{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap}
+.row.end{justify-content:flex-end;margin-top:18px}
+.btn{
+  background:var(--surface);border:1px solid var(--line2);padding:0 14px;height:32px;
+  cursor:pointer;letter-spacing:.01em;font-size:13px;white-space:nowrap;
+  transition:border-color .12s,background .12s,color .12s;
+}
+.btn:hover{border-color:var(--edge);background:var(--surface-hi)}
+/* pressing something that writes to hardware should feel like a press */
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+.btn[disabled]{opacity:.4;cursor:default;transform:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-hi);border-color:var(--accent-hi)}
+.btn.danger:hover{border-color:var(--accent);color:#e0656b}
+
+.seg{display:flex;border:1px solid var(--line2);width:max-content}
+.seg button{
+  background:var(--seg-bg);border:0;border-right:1px solid var(--line2);
+  padding:0 14px;height:30px;cursor:pointer;color:var(--dim);
+  font-family:var(--mono);font-size:12px;transition:background .12s,color .12s;
+}
+.seg button:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--surface-hi);color:var(--fg)}
+.seg button.on{background:var(--seg-on);color:var(--fg)}
+.seg button.on.hot{background:var(--accent);color:#fff}
+
+select,input[type=number],input[type=text]{
+  background:var(--seg-bg);border:1px solid var(--line2);color:var(--fg);
+  padding:0 8px;height:32px;font-family:var(--mono);font-size:12px;
+}
+select:hover,input[type=number]:hover{border-color:var(--edge)}
+select:focus-visible,input:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+
+/* theme tiles: the palette strip is the point - you pick by colour, not by
+   remembering what "citrine" looks like */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;max-width:760px}
+.tile{
+  background:var(--surface);border:1px solid var(--line2);padding:0;cursor:pointer;
+  display:flex;flex-direction:column;text-align:left;
+  transition:border-color .12s;
+}
+.tile:hover{border-color:var(--edge)}
+.tile.on{border-color:var(--accent)}
+.tile:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+.tile .palette{display:flex;height:34px}
+.tile .palette i{flex:1;display:block}
+.tile .nm{
+  padding:7px 10px;font-family:var(--mono);font-size:12px;color:var(--dim);
+  border-top:1px solid var(--line2);
+}
+.tile.on .nm{color:var(--fg)}
+
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 26px}
+.fields label{display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--dim)}
+.slide{display:flex;align-items:center;gap:10px}
+.slide input[type=range]{flex:1;min-width:0}
+.slide output{font-family:var(--mono);font-size:12px;color:var(--fg);min-width:62px;text-align:right}
+
+/* The filled portion is a gradient stop driven by --fill, which app.js sets
+   from the value: CSS cannot work out a range's progress on its own, and an
+   unfilled track gives no sense of where in the span you are. */
+input[type=range]{
+  -webkit-appearance:none;appearance:none;height:3px;outline:none;cursor:pointer;
+  background:linear-gradient(to right,
+    var(--accent) 0 var(--fill,0%), var(--line2) var(--fill,0%) 100%);
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:11px;height:18px;background:var(--fg);
+  cursor:pointer;border:0;transition:background .12s;
+}
+input[type=range]:hover::-webkit-slider-thumb{background:var(--accent-hi)}
+input[type=range]:focus-visible::-webkit-slider-thumb{background:var(--accent)}
+input[type=range]::-moz-range-thumb{
+  width:11px;height:18px;background:var(--fg);border:0;border-radius:0;cursor:pointer;
+}
+input[type=range]::-moz-range-track{height:3px;background:transparent}
+
+/* -------------------------------------------------------------- packets */
+.packets{margin-top:26px;border-top:1px solid var(--line);padding-top:10px}
+.packets summary{
+  cursor:pointer;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);
+}
+.packets pre{
+  margin:12px 0 0;font-family:var(--mono);font-size:11px;color:var(--dim);
+  white-space:pre-wrap;word-break:break-all;line-height:1.7;
+}
+
+/* --------------------------------------------------------------- dialog */
+dialog{
+  background:var(--panel);color:var(--fg);border:1px solid var(--line2);
+  padding:0;width:min(520px,92vw);
+}
+dialog::backdrop{background:#000a;backdrop-filter:blur(2px)}
+dialog form{padding:20px}
+dialog h3{margin:0 0 16px;font-size:16px;font-weight:600}
+dialog form{padding:24px}
+dialog.wide{width:min(760px,95vw)}
+
+/* macro editor -------------------------------------------------------- */
+.dlghead{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
+.dlghead h3{margin:0}
+/* where the macro runs decides whether this app has to stay open, so it is
+   stated on the editor rather than buried in a tooltip */
+.target{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.target.device{color:var(--ok)}
+
+.stephead{
+  display:grid;grid-template-columns:30px 66px 1fr 78px;gap:8px;
+  padding:6px 8px;border:1px solid var(--line);border-bottom:0;
+  font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);
+}
+.addbar{margin-top:12px;flex-wrap:wrap}
+.addbar .sp{flex:1}
+.tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tab{
+  background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;
+  cursor:pointer;color:var(--dim);font-size:12px;
+}
+.tab.on{color:var(--fg);border-bottom-color:var(--accent)}
+.pane{display:none}
+.pane.on{display:block}
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:6px;max-height:300px;overflow:auto}
+.presets button{
+  background:var(--surface);border:1px solid var(--line2);padding:7px 9px;cursor:pointer;
+  font-family:var(--mono);font-size:12px;text-align:left;color:var(--dim);
+}
+.presets button:hover{border-color:var(--edge);color:var(--fg)}
+.presets button.on{border-color:var(--accent);color:var(--fg);background:var(--accent-dim)}
+.chord{
+  width:100%;background:var(--input-bg);border:1px solid var(--line2);padding:11px 12px;
+  font-family:var(--mono);font-size:15px;letter-spacing:.06em;
+}
+.chord:focus{outline:none;border-color:var(--accent)}
+
+/* ---------------------------------------------------------------- toast */
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(14px);
+  background:var(--surface);border:1px solid var(--line2);border-left:3px solid var(--accent);
+  padding:10px 16px;font-size:13px;opacity:0;pointer-events:none;transition:.18s;
+  max-width:min(640px,92vw);
+}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.toast.ok{border-left-color:var(--ok)}
+
+body.disconnected .grid{opacity:.4;pointer-events:none}
+body.disconnected.preview .grid{opacity:1;pointer-events:auto}
+
+@media (max-width:820px){
+  .grid{grid-template-columns:1fr}
+  .col+.col{border-left:0;border-top:1px solid var(--line)}
+}
+
+/* ----------------------------------------------------------------- macros */
+h3.sub{
+  margin:18px 0 8px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);font-weight:600;
+}
+.maclist{list-style:none;margin:0;padding:0}
+.maclist li{
+  display:flex;align-items:center;gap:10px;padding:8px 0;
+  border-top:1px solid var(--line);
+}
+.maclist .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.maclist .meta{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+.tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;padding:2px 6px;
+  border:1px solid var(--line2);color:var(--dim);white-space:nowrap;
+}
+.tag.device{border-color:var(--ok);color:var(--ok)}
+.tag.host{border-color:var(--line2)}
+.mini{
+  background:var(--surface);border:1px solid var(--line2);padding:4px 9px;
+  cursor:pointer;font-size:12px;
+}
+.mini:hover{border-color:var(--edge)}
+.mini:disabled{opacity:.38;cursor:not-allowed}
+.mini:disabled:hover{border-color:var(--line2)}
+.mini.danger:hover{border-color:var(--accent);color:var(--accent-hi)}
+
+table.binds{width:100%;border-collapse:collapse}
+.binds td{padding:5px 8px 5px 0;border-top:1px solid var(--line);vertical-align:middle}
+.binds td:first-child{width:94px;color:var(--dim);font-family:var(--mono);white-space:nowrap}
+.binds select{
+  background:var(--input-bg);border:1px solid var(--line2);color:var(--fg);
+  padding:5px 7px;font-family:var(--mono);font-size:12px;min-width:150px;
+}
+.binds label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+
+/* editor */
+#macroedit{width:min(720px,94vw)}
+.mrow{display:flex;gap:14px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap}
+.mrow label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--dim)}
+.mrow .grow{flex:1;min-width:180px}
+.num{
+  width:74px;background:var(--input-bg);border:1px solid var(--line2);
+  color:var(--fg);padding:6px 7px;font-family:var(--mono);
+}
+.steps{
+  max-height:300px;overflow:auto;border:1px solid var(--line);
+  background:var(--input-bg);
+}
+.steps:empty::after{
+  content:"no steps yet - add one below, or hit Record";
+  display:block;padding:16px;color:var(--dim);font-size:12px;
+}
+/* columns line up with .stephead: index, kind, detail, controls */
+.step{
+  display:grid;grid-template-columns:30px 66px 1fr 78px;gap:8px;
+  align-items:center;padding:5px 8px;
+  border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px;
+}
+.step:last-child{border-bottom:0}
+.step:nth-child(even){background:rgba(255,255,255,.017)}
+.step .ix{color:var(--dim)}
+.step .kind{color:var(--accent);text-transform:uppercase;font-size:10px;letter-spacing:.1em}
+/* every editor for a step, whatever its type, shares the third column */
+.step>select,.step>label,.step>input{grid-column:3;justify-self:start}
+.step>label+label,.step>select+select,.step>select+label{grid-column:3}
+.step .detail{grid-column:3;display:flex;gap:8px;align-items:center;min-width:0;flex-wrap:wrap}
+.step input,.step select{
+  background:var(--seg-bg);border:1px solid var(--line2);color:var(--fg);
+  padding:3px 6px;font-family:var(--mono);font-size:12px;
+}
+.step input[type=number]{width:70px}
+.step .sp{display:none}
+.step .ctl{grid-column:4;display:flex;justify-content:flex-end;gap:2px}
+.step .x{
+  cursor:pointer;color:var(--dim);border:1px solid transparent;background:none;
+  padding:1px 5px;font-family:var(--mono);line-height:1.4;
+}
+.step .x:hover{color:var(--fg);border-color:var(--line2)}
+.steps{max-height:min(46vh,380px)}
+.step .x:hover{color:var(--accent-hi)}
+.rec{border-color:var(--accent)!important;color:var(--accent-hi)!important}
+
+/* ---------------------------------------------------------- track editor --
+   Lanes are rows, time runs left to right, a block is a rectangle whose width
+   is its duration. Colour carries the one distinction that matters at a
+   glance - fires once versus repeats - because position and width already say
+   everything else. */
+.trkwrap { border:1px solid var(--line2); background:var(--bg); }
+.trklanes { overflow-x:auto; overflow-y:visible; }
+.trkrow { display:flex; align-items:stretch; border-bottom:1px solid var(--line); }
+.trkrow:last-child { border-bottom:0; }
+.trkrow.ruler { background:var(--panel); }
+.trkhead {
+  flex:0 0 116px; display:flex; align-items:center; justify-content:space-between;
+  gap:6px; padding:0 9px; height:34px; background:var(--panel);
+  border-right:1px solid var(--line2); font:11px/1 var(--mono);
+  color:var(--dim); text-transform:uppercase; letter-spacing:.07em;
+  position:sticky; left:0; z-index:3;
+}
+.trkrow.ruler .trkhead { height:26px; }
+.trklabel { color:var(--fg); }
+.trkx {
+  background:none; border:0; color:var(--dim); cursor:pointer;
+  font:14px/1 var(--mono); padding:2px 3px;
+}
+.trkx:hover { color:var(--accent-hi); }
+.trktrack { position:relative; flex:1 1 auto; height:34px; }
+.trkrow.ruler .trktrack { height:26px; }
+.trkstrip { position:relative; height:100%; min-width:100%; cursor:copy; }
+.trkruler { position:relative; height:26px; }
+.trktick {
+  position:absolute; top:8px; font:10px/1 var(--mono); color:var(--dim);
+  border-left:1px solid var(--line2); padding-left:3px; height:13px;
+}
+.trkgrid {
+  position:absolute; top:0; height:100%; width:1px;
+  background:var(--line); pointer-events:none;
+}
+
+.trkblk {
+  position:absolute; top:5px; height:24px; box-sizing:border-box;
+  background:var(--accent-dim); border:1px solid var(--accent);
+  cursor:grab; overflow:hidden;
+}
+.trkblk:hover { border-color:var(--accent-hi); }
+.trkblk.spam { background:#1d2a14; border-color:var(--ok); }
+/* A tick is a moment, not a span: the block still has a width because it
+   occupies that much of the pass, but the notch happens at its left edge,
+   so that edge is what is drawn heavily. */
+.trkblk.tick { background:transparent; border-left-width:4px; }
+.trkblk.on { outline:2px solid var(--fg); outline-offset:-3px; }
+.trkblklbl {
+  font:10px/24px var(--mono); color:var(--fg); padding-left:5px;
+  pointer-events:none; user-select:none; white-space:nowrap;
+}
+.trkgrip {
+  position:absolute; right:0; top:0; width:6px; height:100%;
+  cursor:ew-resize; background:var(--accent);
+}
+.trkblk.spam .trkgrip { background:var(--ok); }
+.trkempty { padding:22px; text-align:center; color:var(--dim); font:12px/1.5 var(--sans); }
+
+.trkcfg {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; min-height:34px;
+  padding:9px 10px; border-top:1px solid var(--line2); background:var(--panel);
+}
+.trktitle {
+  font:11px/1 var(--mono); color:var(--fg); text-transform:uppercase;
+  letter-spacing:.07em; min-width:52px;
+}
+.trkhelp { font:11px/1.4 var(--sans); color:var(--dim); }
+.trkf { display:flex; align-items:center; gap:5px; font:11px/1 var(--sans); color:var(--dim); }
+.trkf .num { width:60px; }
+.trkunit { color:var(--dim); opacity:.7; }
+.trknote { font:11px/1 var(--mono); color:var(--dim); }
+#trkwhat { min-width:150px; max-width:200px; }
+#trkkind { max-width:130px; }
+#macroedit.lanes { width:min(1000px,96vw); }
+
+/* ---------------------------------------------------------------- tools */
+/* every class here is pf-prefixed: generic names collide with the app's own */
+.pflive{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.pflive b{color:var(--fg);font-weight:600}
+.pffig{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:1px;background:var(--line);border:1px solid var(--line);margin-top:14px;
+}
+.pffig div{background:var(--panel);padding:10px 12px;min-width:0}
+.pffig span{display:block;font-size:11px;letter-spacing:.04em;color:var(--dim)}
+.pffig b{display:block;font:600 18px var(--mono);margin-top:4px;color:var(--fg);white-space:nowrap}
+.pffig em{font-style:normal;font-size:11px;color:var(--dim);font-family:var(--mono)}
+.pfnotes{margin:12px 0 0;padding-left:18px;font-size:13px;line-height:1.55;max-width:820px}
+.pfcharts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin-top:14px}
+.pfchart{margin:0;min-width:0}
+.pfchart figcaption{font-size:12px;color:var(--dim);margin-bottom:6px}
+.pfchart canvas{display:block;width:100%;height:170px}
+.pfread{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px;min-height:1.3em}
+table.pftable{width:100%;border-collapse:collapse;margin-top:12px}
+.pftable th{
+  text-align:left;font:600 11px var(--sans);letter-spacing:.06em;
+  color:var(--dim);padding:0 8px 8px 0;
+}
+.pftable td{padding:6px 8px 6px 0;border-top:1px solid var(--line);vertical-align:top;
+  font-family:var(--mono);font-size:12px}
+.pftable td.pfok{color:var(--dim)}
+.pftable caption{text-align:left;caption-side:bottom;padding-top:6px}
+#pfclicktable td{white-space:nowrap}
+.pffig[hidden],.pfcharts[hidden],#pfclickadvice[hidden],.pftable[hidden]{display:none}
+.pfsys td:first-child{font-family:inherit;font-size:13px}
+.pfsys td:nth-child(2){width:280px}
+.pfsys td p{margin:4px 0 0;font-family:inherit;color:var(--dim);font-size:12px;max-width:640px;line-height:1.45}
+.pfsys td:last-child{text-align:right;width:90px}
+.pfinline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+.tag.warn{border-color:var(--accent);color:var(--accent-hi)}
+.pftabs{display:flex;gap:4px;grid-column:1/-1;border-bottom:1px solid var(--line);margin-bottom:-8px}
+.pftabs button{
+  background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px 10px;
+  color:var(--dim);cursor:pointer;font-size:13px;margin-bottom:-1px;
+}
+.pftabs button:hover{color:var(--fg)}
+.pftabs button.on{color:var(--fg);border-bottom-color:var(--accent)}
+.pftabs button:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+#page-tools .blk[hidden]{display:none}
+.pfmeter[hidden],.pfchart[hidden]{display:none}
+.pfmeter{margin-top:14px}
+.pfmeter b{display:block;font:600 32px var(--mono);color:var(--fg)}
+.pfmeter>span{font-size:12px;color:var(--dim)}
+.pfbar{height:6px;background:var(--seg-bg);border:1px solid var(--line2);margin:10px 0}
+.pfbar i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s}
+.pfbar i.bad{background:var(--accent)}
+.pfmeter canvas{display:block;width:100%;height:60px}
+.pfpathcv{display:block;width:100%;height:320px;margin-top:12px;background:var(--input-bg);border:1px solid var(--line)}
+.pfverdict{font-size:13px;line-height:1.55;margin:12px 0 0;max-width:820px}
+.pfcalc{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}
+.pfcalc label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--dim)}
+.pfcalc .num{width:110px}
+.pfusbt td:first-child{color:var(--dim);width:90px;font-family:inherit}
+.pfh4{margin:20px 0 8px;font-size:13px;color:var(--fg);font-weight:600}
+.pfexes{display:flex;gap:6px;flex-wrap:wrap}
+.pfexe{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line2);padding:3px 3px 3px 9px;font-family:var(--mono);font-size:12px}
+.pfover td{vertical-align:middle}
+.pfover td:first-child{width:220px;font-family:inherit}
+.pfacts{text-align:right;white-space:nowrap}
+.pfacts .mini+.mini{margin-left:6px}
+#pfbindtable[hidden],#proftable[hidden]{display:none}
+#profbadge{margin-left:4px}
+#profbadge[hidden]{display:none}
+.pfover select,#pfbinds select{min-width:150px}
+#pfspeedchart{margin-top:16px}
+.pfsys td:last-child{width:120px}
+.pfsys .btn{white-space:nowrap}
+#pfwheeln{width:100px}
+.panes{min-height:calc(100vh - 67px)}
